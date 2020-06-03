@@ -12,7 +12,8 @@
 - Колонки в csv: date, region, infected, recovered, dead.
 
 ## Файлы
-- dags/homework_1.py - код Airflow DAG для сбора статистики
+- dags/
+  - homework_1.py - код Airflow DAG для сбора статистики
 - config/
   - airflow - конфигурация сервера nginx
   - airflow.cfg - конфигурация Airflow
