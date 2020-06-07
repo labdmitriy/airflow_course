@@ -107,6 +107,7 @@ def clean_customers_data(file_path):
             writer.writeheader()
             
             for line in reader:
+                line = {key: clean_field(line[key]) for key in line}
                 line['age'] = calculate_age(line['birth_date'], datetime_format)
                 writer.writerow(line)
                 
@@ -128,6 +129,7 @@ def clean_goods_data(file_path):
             writer.writeheader()
             
             for line in reader:
+                line = {key: clean_field(line[key]) for key in line}
                 writer.writerow(line)
                 
     return clean_file_path
@@ -152,6 +154,52 @@ def process_goods_data(conn_id, table_name, dir_path):
     clean_file_path = clean_goods_data(file_path)
     return clean_file_path
 
+def drop_table(cur, table_name):
+    print(f'drop table {table_name}')
+
+    table_id = sql.Identifier(table_name)
+    sql_query = sql.SQL('DROP TABLE IF EXISTS {}').format(table_id)
+    cur.execute(sql_query)
+
+def create_table(cur, table_name, table_cols):
+    print(f'create table {table_name}')
+    
+    table_id = sql.Identifier(table_name)
+    fields = ', '.join([f'{sql.Identifier(col_name).as_string(cur)} {col_type}' 
+                        for (col_name, col_type) in table_cols.items()])
+
+    columns_list = sql.SQL(fields)
+    
+    sql_query = sql.SQL('CREATE TABLE IF NOT EXISTS {} ({})').format(table_id, columns_list)
+    cur.execute(sql_query)
+
+def save_table_data(cur, table_name, file_path):
+    print(f'save table {table_name}')
+
+    table_id = sql.Identifier(table_name)
+    sql_query = sql.SQL("COPY {} FROM STDIN DELIMITER ',' CSV HEADER").format(table_id)
+
+    with open(file_path, 'r') as f:
+        cur.copy_expert(sql_query, f)
+
+    return file_path
+
+def create_dataset(conn_id, target_table, temp_tables):
+    # create schema if not exists
+    pg_hook = PostgresHook(postgres_conn_id=conn_id)
+
+    with pg_hook.get_conn() as conn:
+        with conn.cursor() as cur:
+            for table_name, table_info in temp_tables.items():
+                drop_table(cur, table_name)
+                create_table(cur, table_name, table_info['columns'])
+                save_table_data(cur, table_name, table_info['file_path'])
+
+    # drop & create tmp tables
+    # insert rows to tmp tables
+    # create results table if not exists
+    # insert data to results table from tmp tables
+
 default_args = {
 
 }
@@ -170,6 +218,55 @@ SHARED_DB_CONN_ID = 'hw2_shared_db'
 PRIVATE_DB_CONN_ID = 'hw2_private_db'
 CUSTOMERS_TABLE = 'customers'
 GOODS_TABLE = 'goods'
+DATASET_TABLE = 'final_data'
+TEMP_TABLES = {
+    'orders_tmp': {
+        'file_path': DATA_PATH/'orders_clean.csv',
+        'columns': {
+            'order_uuid': 'char(50)',
+            'good_title': 'char(100)',
+            'date': 'timestamp',
+            'amount': 'integer',
+            'name': 'char(50)',
+            'email': 'char(50)'
+        }
+    },
+    'status_tmp': {
+        'file_path': DATA_PATH/'5ed7391379382f568bd22822_clean.csv',
+        'columns': {
+            'order_uuid': 'char(50)',
+            'payment_status': 'char(10)'
+        }
+    },
+    'customers_tmp': {
+        'file_path': DATA_PATH/'customers_clean.csv',
+        'columns': {
+            'email': 'char(50)',
+            'age': 'integer'
+        }
+    },
+    'goods_tmp': {
+        'file_path': DATA_PATH/'goods_clean.csv',
+        'columns': {
+            'good_title': 'char(100)',
+            'price': 'numeric'
+        }
+    }
+}
+
+
+TARGET_TABLE = {
+    'final_data': {
+        'name': 'char(50)',
+        'age': 'integer',
+        'good_title': 'char(100)',
+        'date': 'timestamp',
+        'payment_status': 'char(10)',
+        'total_price': 'numeric',
+        'amount': 'integer',
+        'last_modified_at': 'tim'
+    }
+}
 
 process_orders_task = PythonOperator(
     task_id='process_orders_data',
@@ -199,4 +296,11 @@ process_goods_task = PythonOperator(
     op_args=[SHARED_DB_CONN_ID, GOODS_TABLE, DATA_PATH]
 )
 
-process_orders_task >> process_status_task >> process_customers_task >> process_goods_task
+create_dataset_task = PythonOperator(
+    task_id='create_dataset',
+    dag=dag,
+    python_callable=create_dataset,
+    op_args=[PRIVATE_DB_CONN_ID, TARGET_TABLE, TEMP_TABLES]
+)
+
+process_orders_task >> process_status_task >> process_customers_task >> process_goods_task >> create_dataset_task
