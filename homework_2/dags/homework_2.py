@@ -4,12 +4,12 @@ import csv
 import json
 
 import requests
-import psycopg2
 from psycopg2 import sql
 
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from airflow.hooks.postgres_hook import PostgresHook
+from airflow.hooks.http_hook import HttpHook
 
 def download_file(url, dir_path):
     file_name = url.split('/')[-1]
@@ -154,6 +154,13 @@ def process_goods_data(conn_id, table_name, dir_path):
     clean_file_path = clean_goods_data(file_path)
     return clean_file_path
 
+def create_schema(cur, schema_name):
+    print(f'create schema {schema_name}')
+
+    schema_id = sql.Identifier(schema_name)
+    sql_query = sql.SQL('CREATE SCHEMA IF NOT EXISTS {}').format(schema_id)
+    cur.execute(sql_query)
+
 def drop_table(cur, table_name):
     print(f'drop table {table_name}')
 
@@ -161,16 +168,24 @@ def drop_table(cur, table_name):
     sql_query = sql.SQL('DROP TABLE IF EXISTS {}').format(table_id)
     cur.execute(sql_query)
 
-def create_table(cur, table_name, table_cols):
+def create_table(cur, table_name, table_cols, constraint_cols=None):
     print(f'create table {table_name}')
     
     table_id = sql.Identifier(table_name)
-    fields = ', '.join([f'{sql.Identifier(col_name).as_string(cur)} {col_type}' 
-                        for (col_name, col_type) in table_cols.items()])
-
-    columns_list = sql.SQL(fields)
+    columns = ', '.join([f'{sql.Identifier(col_name).as_string(cur)} {col_type}' 
+                         for (col_name, col_type) in table_cols.items()])
+    columns_list = sql.SQL(columns)
     
-    sql_query = sql.SQL('CREATE TABLE IF NOT EXISTS {} ({})').format(table_id, columns_list)
+    if constraint_cols is None:
+        sql_text = 'CREATE TABLE IF NOT EXISTS {} ({})'
+        sql_query = sql.SQL(sql_text).format(table_id, columns_list)
+    else:
+        constraints = [sql.Identifier(field) for field in constraint_cols]
+        constraints_list =  sql.SQL(',').join(constraints)
+                             
+        sql_text = 'CREATE TABLE IF NOT EXISTS {} ({}, CONSTRAINT unq_rec UNIQUE ({}))'
+        sql_query = sql.SQL(sql_text).format(table_id, columns_list, constraints_list)
+
     cur.execute(sql_query)
 
 def save_table_data(cur, table_name, file_path):
@@ -184,21 +199,26 @@ def save_table_data(cur, table_name, file_path):
 
     return file_path
 
-def create_dataset(conn_id, target_table, temp_tables):
-    # create schema if not exists
+def generate_final_data(cur, target_statement):
+    cur.execute(target_statement)
+
+def create_dataset(conn_id, target_table, target_statement, temp_tables):
     pg_hook = PostgresHook(postgres_conn_id=conn_id)
 
     with pg_hook.get_conn() as conn:
         with conn.cursor() as cur:
+            create_schema(cur, 'public')
+
             for table_name, table_info in temp_tables.items():
                 drop_table(cur, table_name)
                 create_table(cur, table_name, table_info['columns'])
                 save_table_data(cur, table_name, table_info['file_path'])
 
-    # drop & create tmp tables
-    # insert rows to tmp tables
-    # create results table if not exists
-    # insert data to results table from tmp tables
+            create_table(cur, target_table['name'], target_table['columns'], 
+                         target_table['constraints'])
+            
+            generate_final_data(cur, target_statement)
+            conn.commit()
 
 default_args = {
 
@@ -254,9 +274,9 @@ TEMP_TABLES = {
     }
 }
 
-
 TARGET_TABLE = {
-    'final_data': {
+    'name': 'final_data',
+    'columns': {
         'name': 'char(50)',
         'age': 'integer',
         'good_title': 'char(100)',
@@ -264,9 +284,31 @@ TARGET_TABLE = {
         'payment_status': 'char(10)',
         'total_price': 'numeric',
         'amount': 'integer',
-        'last_modified_at': 'tim'
-    }
+        'last_modified_at': 'timestamp',
+    },
+    'constraints': ['name', 'good_title', 'date']
 }
+
+TARGET_STATEMENT = '''
+INSERT INTO final_data
+SELECT 
+	o.name,
+	c.age,
+	g.good_title,
+	o.date,
+	s.payment_status,
+	g.price * o.amount AS total_price,
+	o.amount,
+	now() AS last_modified_at 
+FROM orders_tmp o
+LEFT JOIN status_tmp s USING (order_uuid)
+LEFT JOIN customers_tmp c USING (email)
+LEFT JOIN goods_tmp g USING (good_title)
+ON CONFLICT ON CONSTRAINT unq_rec
+DO UPDATE SET 
+	payment_status=EXCLUDED.payment_status,
+	last_modified_at=now() at time zone 'utc';
+'''
 
 process_orders_task = PythonOperator(
     task_id='process_orders_data',
@@ -300,7 +342,7 @@ create_dataset_task = PythonOperator(
     task_id='create_dataset',
     dag=dag,
     python_callable=create_dataset,
-    op_args=[PRIVATE_DB_CONN_ID, TARGET_TABLE, TEMP_TABLES]
+    op_args=[PRIVATE_DB_CONN_ID, TARGET_TABLE, TARGET_STATEMENT, TEMP_TABLES]
 )
 
 process_orders_task >> process_status_task >> process_customers_task >> process_goods_task >> create_dataset_task
