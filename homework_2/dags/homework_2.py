@@ -11,16 +11,17 @@ from airflow.operators.python_operator import PythonOperator
 from airflow.hooks.postgres_hook import PostgresHook
 from airflow.hooks.http_hook import HttpHook
 
-def download_file(url, dir_path):
-    file_name = url.split('/')[-1]
-    file_path = dir_path/file_name
 
-    with requests.get(url) as r:
-        r.raise_for_status()
-        
-        with open(file_path, 'w') as f:
-            f.write(r.content.decode('utf-8'))
-        
+def download_file(conn_id, endpoint, dir_path):
+    file_path = dir_path/endpoint.split('/')[-1]
+    
+    hook = HttpHook(http_conn_id=conn_id, method='GET')
+    resp = hook.run(f'/{endpoint}')
+    print(resp)
+
+    with open(file_path, 'w') as f:
+        f.write(resp.content.decode('utf-8'))
+
     return file_path
 
 def clean_field(field):
@@ -134,13 +135,13 @@ def clean_goods_data(file_path):
                 
     return clean_file_path
 
-def process_orders_data(url, dir_path):
-    file_path = download_file(url, dir_path)
+def process_orders_data(conn_id, file_name, dir_path):
+    file_path = download_file(conn_id, file_name, dir_path)
     clean_file_path = clean_orders_data(file_path)
     return clean_file_path
 
-def process_status_data(url, dir_path):
-    file_path = download_file(url, dir_path)
+def process_status_data(conn_id, file_name, dir_path):
+    file_path = download_file(conn_id, file_name, dir_path)
     clean_file_path = clean_status_data(file_path)
     return clean_file_path
 
@@ -220,25 +221,20 @@ def create_dataset(conn_id, target_table, target_statement, temp_tables):
             generate_final_data(cur, target_statement)
             conn.commit()
 
-default_args = {
-
-}
-
-dag = DAG(
-    'homework_2',
-    default_args=default_args,
-    start_date=datetime(2020, 6, 6),
-    catchup=False
-)
-
 DATA_PATH = Path('/home/jupyter/data')
-CSV_URL = 'https://airflow101.python-jitsu.club/orders.csv'
-JSON_URL = 'https://api.jsonbin.io/b/5ed7391379382f568bd22822'
+
+CSV_CONN_ID = 'hw2_csv'
+CSV_FILE_NAME = 'orders.csv'
+
+API_CONN_ID = 'hw2_api'
+API_ENDPOINT = 'b/5ed7391379382f568bd22822'
+
 SHARED_DB_CONN_ID = 'hw2_shared_db'
 PRIVATE_DB_CONN_ID = 'hw2_private_db'
 CUSTOMERS_TABLE = 'customers'
 GOODS_TABLE = 'goods'
 DATASET_TABLE = 'final_data'
+
 TEMP_TABLES = {
     'orders_tmp': {
         'file_path': DATA_PATH/'orders_clean.csv',
@@ -310,18 +306,29 @@ DO UPDATE SET
 	last_modified_at=now() at time zone 'utc';
 '''
 
+default_args = {
+
+}
+
+dag = DAG(
+    'homework_2',
+    default_args=default_args,
+    start_date=datetime(2020, 6, 6),
+    catchup=False
+)
+
 process_orders_task = PythonOperator(
     task_id='process_orders_data',
     dag=dag,
     python_callable=process_orders_data,
-    op_args=[CSV_URL, DATA_PATH]
+    op_args=[CSV_CONN_ID, CSV_FILE_NAME, DATA_PATH]
 )
 
 process_status_task = PythonOperator(
     task_id='process_status_data',
     dag=dag,
     python_callable=process_status_data,
-    op_args=[JSON_URL, DATA_PATH]
+    op_args=[API_CONN_ID, API_ENDPOINT, DATA_PATH]
 )
 
 process_customers_task = PythonOperator(
