@@ -17,7 +17,6 @@ def download_file(conn_id, endpoint, dir_path):
     
     hook = HttpHook(http_conn_id=conn_id, method='GET')
     resp = hook.run(f'/{endpoint}')
-    print(resp)
 
     with open(file_path, 'w') as f:
         f.write(resp.content.decode('utf-8'))
@@ -136,21 +135,25 @@ def clean_goods_data(file_path):
     return clean_file_path
 
 def process_orders_data(conn_id, file_name, dir_path):
+    print('process orders data')
     file_path = download_file(conn_id, file_name, dir_path)
     clean_file_path = clean_orders_data(file_path)
     return clean_file_path
 
 def process_status_data(conn_id, file_name, dir_path):
+    print('process status data')
     file_path = download_file(conn_id, file_name, dir_path)
     clean_file_path = clean_status_data(file_path)
     return clean_file_path
 
 def process_customers_data(conn_id, table_name, dir_path):
+    print('process customers data')
     file_path = get_table_data(conn_id, table_name, dir_path)
     clean_file_path = clean_customers_data(file_path)
     return clean_file_path
 
 def process_goods_data(conn_id, table_name, dir_path):
+    print('process goods data')
     file_path = get_table_data(conn_id, table_name, dir_path)
     clean_file_path = clean_goods_data(file_path)
     return clean_file_path
@@ -201,9 +204,12 @@ def save_table_data(cur, table_name, file_path):
     return file_path
 
 def generate_final_data(cur, target_statement):
+    print('generate final data')
     cur.execute(target_statement)
 
 def create_dataset(conn_id, target_table, target_statement, temp_tables):
+    print('create dataset')
+
     pg_hook = PostgresHook(postgres_conn_id=conn_id)
 
     with pg_hook.get_conn() as conn:
@@ -233,7 +239,6 @@ SHARED_DB_CONN_ID = 'hw2_shared_db'
 PRIVATE_DB_CONN_ID = 'hw2_private_db'
 CUSTOMERS_TABLE = 'customers'
 GOODS_TABLE = 'goods'
-DATASET_TABLE = 'final_data'
 
 TEMP_TABLES = {
     'orders_tmp': {

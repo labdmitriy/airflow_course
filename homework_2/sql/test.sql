@@ -1,4 +1,4 @@
-CREATE SCHEMA IF NOT EXISTS public;
+	 public;
 
 DROP TABLE IF EXISTS orders_tmp;
 CREATE TABLE IF NOT EXISTS orders_tmp (
