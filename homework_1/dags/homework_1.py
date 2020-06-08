@@ -186,7 +186,7 @@ dag = DAG(
 )
 
 # Define output data directory
-DATA_DIR = Path('./data')
+DATA_DIR = Path('/home/jupyter/data')
 # If directory does not exists - create all subfolders
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
