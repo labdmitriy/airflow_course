@@ -3,12 +3,14 @@ from configparser import ConfigParser
 from pathlib import Path
 from operator import itemgetter
 from datetime import datetime
+import json
 
 import requests
 
 
 class TestBot:
     BASE_URL = 'https://api.telegram.org'
+    OFFSET_FILE_PATH = Path('/home/jupyter/data/bot_offset')
 
     def __init__(self, token: str) -> None:
         self.token = token
@@ -20,6 +22,10 @@ class TestBot:
 
         print('current update', current_update)
 
+        # with open(self.OFFSET_FILE_PATH, 'w') as f:
+        #     f.write(str(current_update))
+
+        # chat_updates = list(filter(lambda x: ))
         update_ids = list(map(get_update_id, current_update['result']))
 
         if len(update_ids) > 0:
@@ -65,7 +71,7 @@ class TestBot:
 
     def get_updates(self, offset: int = 0, timeout: int = 0) -> Dict:
         payload = {
-            # 'allowed_updates': ['callback_query'],
+            'allowed_updates': json.dumps(['callback_query']),
             'timeout': timeout,
             'offset': offset
         }
