@@ -90,14 +90,16 @@ class TestBot:
         )
         return response.json()
 
-    def edit_message(self, chat_id: str, message_id: str, reply_markup: Dict) -> Dict:
+    def edit_message(self, chat_id: str, message_id: str, 
+                     message_text: str, reply_markup: Dict) -> Dict:
         payload: Dict[str, Any] = {
             'chat_id': chat_id,
             'message_id': message_id,
+            'text': message_text,
             'reply_markup': reply_markup
         }
         response = requests.post(
-            f'{self.base_url}/editMessageReplyMarkup', json=payload, timeout=5
+            f'{self.base_url}/editMessageText', json=payload, timeout=5
         )
         return response.json()
 
@@ -132,8 +134,9 @@ if len(result) > 0:
     chat_id = callback_query['message']['chat']['id']
     message_id = callback_query['message']['message_id']
 
-    reply_markup = {'inline_keyboard': [[]]}
-    print(bot.edit_message(chat_id, message_id, reply_markup))
+    reply_markup: Dict = {'inline_keyboard': [[]]}
+    message_text = 'Спасибо'
+    print(bot.edit_message(chat_id, message_id, message_text, reply_markup))
 
     callback_query_id = callback_query['id']
     print(bot.answer_callback(callback_query_id))
