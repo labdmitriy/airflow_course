@@ -4,6 +4,7 @@ from pathlib import Path
 from operator import itemgetter
 from datetime import datetime
 import json
+from collections import defaultdict
 
 import requests
 
@@ -18,12 +19,9 @@ class TestBot:
 
     def _get_offset(self, chat_id: Union[str, int]) -> int:
         get_update_id = itemgetter('update_id')
-        current_update = self.get_updates(timeout=3)
+        current_update = self.get_updates()
 
         print('current update', current_update)
-
-        # with open(self.OFFSET_FILE_PATH, 'w') as f:
-        #     f.write(str(current_update))
 
         # chat_updates = list(filter(lambda x: ))
         update_ids = list(map(get_update_id, current_update['result']))
@@ -32,6 +30,9 @@ class TestBot:
             offset = max(update_ids) + 1
         else:
             offset = 0
+
+        # with open(self.OFFSET_FILE_PATH, 'w') as f:
+        #     f.write(str(offset))
 
         print(offset)
         return offset
@@ -103,15 +104,39 @@ update_response = bot.get_updates(offset=bot.offset, timeout=3)
 print('update response')
 print(update_response)
 
-# db_record = filter(lambda x: x)
+
 result = update_response['result']
+
+AIRTABLE_URL = config['DEFAULT']['airtable_url']
+AIRTABLE_API_KEY = config['DEFAULT']['airtable_api_key']
+print(AIRTABLE_URL, AIRTABLE_API_KEY)
+
+# from dateutil import Date
 
 if len(result) > 0:
     callback_query = result[0]['callback_query']
-    db_record = {}
-    db_record['chat_id'] = TEST_CHAT_ID
-    db_record['username'] = callback_query['from']['id']
-    db_record['trigerred_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    db_record['event_type'] = 'click'
-    db_record['reporter_name'] = callback_query['data']
+    db_record: Dict[str, Dict] = defaultdict(dict)
+    # db_record = filter(lambda x: x)
+    db_record['fields']['chat_id'] = str(callback_query['message']['chat']['id']) #TEST_CHAT_ID
+    db_record['fields']['username'] = str(callback_query['from']['id'])
+
+    now = datetime.now()
+    db_record['fields']['triggered_at'] = datetime.strftime(now, '%Y-%m-%dT%H:%M:%S.000Z')
+    db_record['fields']['event_type'] = 'click'
+    db_record['fields']['reporter_name'] = callback_query['data']
     print(db_record)
+
+    data = defaultdict(list)
+    data['records'].append(dict(db_record))
+
+    print(dict(data))
+
+headers = {
+    'Authorization': f'Bearer {AIRTABLE_API_KEY}'
+}
+
+print(headers)
+
+response = requests.post(AIRTABLE_URL, json=dict(data), headers=headers)
+response.raise_for_status()
+print(response.json())
