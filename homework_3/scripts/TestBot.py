@@ -81,6 +81,26 @@ class TestBot:
         )
         return response.json()
 
+    def answer_callback(self, callback_query_id: str) -> Dict:
+        payload = {
+            'callback_query_id': callback_query_id
+        }
+        response = requests.post(
+            f'{self.base_url}/answerCallbackQuery', json=payload, timeout=5
+        )
+        return response.json()
+
+    def edit_message(self, chat_id: str, message_id: str, reply_markup: Dict) -> Dict:
+        payload: Dict[str, Any] = {
+            'chat_id': chat_id,
+            'message_id': message_id,
+            'reply_markup': reply_markup
+        }
+        response = requests.post(
+            f'{self.base_url}/editMessageReplyMarkup', json=payload, timeout=5
+        )
+        return response.json()
+
 
 CONFIG_PATH = Path(__file__).parent.absolute()/Path('../config')
 
@@ -93,7 +113,7 @@ TEST_CHAT_ID = config['DEFAULT']['test_chat_id']
 bot = TestBot(token=TEST_TOKEN)
 msg_response = bot.send_message(TEST_CHAT_ID, text='Привет',
                                 include_button=True, button_text='Поехали',
-                                reporter_name='labdmitriy')
+                                reporter_name='labdmitriy_airflow_app')
 print('message response')
 print(msg_response)
 
@@ -104,25 +124,26 @@ update_response = bot.get_updates(offset=bot.offset, timeout=3)
 print('update response')
 print(update_response)
 
-
 result = update_response['result']
-
-AIRTABLE_URL = config['DEFAULT']['airtable_url']
-AIRTABLE_API_KEY = config['DEFAULT']['airtable_api_key']
-print(AIRTABLE_URL, AIRTABLE_API_KEY)
-
-# from dateutil import Date
 
 if len(result) > 0:
     callback_query = result[0]['callback_query']
+    
+    chat_id = callback_query['message']['chat']['id']
+    message_id = callback_query['message']['message_id']
+
+    reply_markup = {'inline_keyboard': [[]]}
+    print(bot.edit_message(chat_id, message_id, reply_markup))
+
+    callback_query_id = callback_query['id']
+    print(bot.answer_callback(callback_query_id))
+
     db_record: Dict[str, Dict] = defaultdict(dict)
     # db_record = filter(lambda x: x)
-    db_record['fields']['chat_id'] = str(callback_query['message']['chat']['id']) #TEST_CHAT_ID
-    db_record['fields']['username'] = str(callback_query['from']['id'])
-
-    now = datetime.now()
-    db_record['fields']['triggered_at'] = datetime.strftime(now, '%Y-%m-%dT%H:%M:%S.000Z')
-    db_record['fields']['event_type'] = 'click'
+    db_record['fields']['chat_id'] = str(callback_query['message']['chat']['id'])
+    db_record['fields']['username'] = str(callback_query['from']['username'])
+    db_record['fields']['triggered_at'] = datetime.now().isoformat()
+    db_record['fields']['event_type'] = 'user_click'
     db_record['fields']['reporter_name'] = callback_query['data']
     print(db_record)
 
@@ -131,12 +152,17 @@ if len(result) > 0:
 
     print(dict(data))
 
-headers = {
-    'Authorization': f'Bearer {AIRTABLE_API_KEY}'
-}
 
-print(headers)
+    # print(headers)
 
-response = requests.post(AIRTABLE_URL, json=dict(data), headers=headers)
-response.raise_for_status()
-print(response.json())
+    AIRTABLE_URL = config['DEFAULT']['airtable_url']
+    AIRTABLE_API_KEY = config['DEFAULT']['airtable_api_key']
+    # print(AIRTABLE_URL, AIRTABLE_API_KEY)
+
+    headers = {
+        'Authorization': f'Bearer {AIRTABLE_API_KEY}'
+    }
+
+    response = requests.post(AIRTABLE_URL, json=dict(data), headers=headers)
+    response.raise_for_status()
+    print(response.json())
