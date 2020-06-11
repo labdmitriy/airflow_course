@@ -38,7 +38,7 @@ wait_for_clicks = TelegramActionsIncrementSensor(
     allowed_updates=['callback_query'],
     answer_text='Спасибо',
     task_id='wait_for_clicks',
-    poke_interval=1,
+    poke_interval=3,
     dag=dag
 )
 

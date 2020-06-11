@@ -1,6 +1,9 @@
+# import sys
 from airflow import DAG
 from airflow.utils.dates import days_ago
 from airflow.models import Variable
+
+# sys.path.insert(1, '/home/jupyter/lib/telegram_interactions')
 
 from telegram_interactions.operators import (
     TelegramSendMessageOperator,
@@ -38,7 +41,7 @@ wait_for_clicks = TelegramActionsIncrementSensor(
     allowed_updates=['callback_query'],
     answer_text='Спасибо',
     task_id='wait_for_clicks',
-    poke_interval=1,
+    poke_interval=3,
     dag=dag
 )
 
