@@ -17,16 +17,6 @@ from airflow.hooks.http_hook import HttpHook
 FieldType = Union[str, int, float, datetime, None]
 
 
-def download_file(conn_id: str, endpoint: Path, dir_path: Path) -> Path:
-    file_path = dir_path/endpoint.name
-
-    hook = HttpHook(http_conn_id=conn_id, method='GET')
-    resp = hook.run(str(endpoint))
-
-    with open(file_path, 'w') as f:
-        f.write(resp.content.decode('utf-8'))
-
-    return file_path
 
 
 def strip(field: str) -> str:
@@ -144,9 +134,8 @@ def clean_data(
 
 
 class PostgresDB:
-    def __init__(self, conn_id: str, autocommit: bool = False) -> None:
+    def __init__(self, conn_id: str) -> None:
         self.hook = PostgresHook(postgres_conn_id=conn_id)
-        self.autocommit = autocommit
 
     def save_table_to_file(
         self,
@@ -163,7 +152,11 @@ class PostgresDB:
 
         return file_path
 
-    def load_table_from_file(self, table_name, file_path):
+    def load_table_from_file(
+        self, 
+        table_name: str, 
+        file_path: Path
+    ) -> Path:
         table_id = sql.Identifier(table_name)
         sql_text = "COPY {} FROM STDIN DELIMITER ',' CSV HEADER"
         sql_query = sql.SQL(sql_text).format(table_id)
@@ -172,7 +165,7 @@ class PostgresDB:
 
         return file_path
 
-    def create_schema(self, schema_name):
+    def create_schema(self, schema_name: str) -> None:
         schema_id = sql.Identifier(schema_name)
         sql_query = sql.SQL('CREATE SCHEMA IF NOT EXISTS {}').format(schema_id)
 
@@ -180,7 +173,7 @@ class PostgresDB:
             with conn.cursor() as cur:
                 cur.execute(sql_query)
 
-    def create_table(self, table_info):
+    def create_table(self, table_info: Dict) -> None:
         table_name = table_info['table_name']
         table_cols = table_info['table_cols']
         constraint_name = table_info.get('constraint_name')
@@ -213,7 +206,7 @@ class PostgresDB:
 
                 cur.execute(sql_query)
 
-    def drop_table(self, table_name):
+    def drop_table(self, table_name: str) -> None:
         table_id = sql.Identifier(table_name)
         sql_query = sql.SQL('DROP TABLE IF EXISTS {}').format(table_id)
 
@@ -221,7 +214,7 @@ class PostgresDB:
             with conn.cursor() as cur:
                 cur.execute(sql_query)
 
-    def execute(self, sql_query):
+    def execute(self, sql_query: str) -> None:
         with self.hook.get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(sql_query)
@@ -229,7 +222,40 @@ class PostgresDB:
             conn.commit()
 
 
-def create_dataset(conn_id, target_sql, target_table, temp_tables):
+def download_file(
+    conn_id: str,
+    endpoint: str,
+    dir_path: Path
+) -> Path:
+    file_name = endpoint.split('/')[-1]
+    file_path = dir_path/file_name
+
+    hook = HttpHook(http_conn_id=conn_id, method='GET')
+    resp = hook.run(str(endpoint))
+
+    with open(file_path, 'w') as f:
+        f.write(resp.content.decode('utf-8'))
+
+    return file_path
+
+
+def download_table_data(
+    conn_id: str,
+    table_name: str,
+    dir_path: Path
+) -> Path:
+    pg_db = PostgresDB(conn_id)
+    file_path = pg_db.save_table_to_file(table_name, dir_path)
+
+    return file_path
+
+
+def create_dataset(
+    conn_id: str,
+    target_sql: str,
+    target_table: Dict,
+    temp_tables: List
+) -> None:
     pg_db = PostgresDB(conn_id)
 
     for table_info in temp_tables:
@@ -429,9 +455,49 @@ DO UPDATE SET
     last_modified_at=now() at time zone 'utc';
 '''
 
-create_dataset(
-    PRIVATE_DB_CONN_ID,
-    TARGET_SQL,
-    TARGET_TABLE,
-    TEMP_TABLES
-)
+# create_dataset(
+#     PRIVATE_DB_CONN_ID,
+#     TARGET_SQL,
+#     TARGET_TABLE,
+#     TEMP_TABLES
+# )
+
+
+def download_data(
+    conn_id: str,
+    object_name: str,
+    object_type: str,
+    dir_path: Path
+) -> Path:
+    if object_type == 'file':
+        file_path = download_file(conn_id, object_name, dir_path)
+    elif object_type == 'table':
+        file_path = download_table_data(conn_id, object_name, dir_path)
+
+    return file_path
+
+
+def process_data(
+    conn_id: str,
+    object_name: str,
+    object_type: str,
+    dir_path: Path,
+    file_type: str,
+    field_names: List,
+    clean_map: OrderedDict,
+    gen_map: OrderedDict
+) -> Path:
+    file_path = download_data(
+        conn_id,
+        object_name,
+        object_type,
+        dir_path
+    )
+    clean_file_path = clean_data(
+        file_path,
+        file_type,
+        field_names,
+        clean_map,
+        gen_map
+    )
+    return clean_file_path
