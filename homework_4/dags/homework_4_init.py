@@ -249,7 +249,6 @@ def create_dataset(conn_id, target_table, target_statement, temp_tables):
                          target_table['constraints'])
 
             generate_final_data(cur, target_statement)
-            conn.commit()
 
 
 DATA_PATH = Path('/home/jupyter/data')
