@@ -4,27 +4,16 @@ from pathlib import Path
 from typing import List
 
 from airflow import DAG
+from airflow.models import Variable
 from airflow.operators.python_operator import PythonOperator
 from airflow.utils.dates import days_ago
-
 
 sys.path.insert(1, '/home/jupyter/lib/merch')
 from merch.calculators import calculate_age, calculate_payment_status
 from merch.cleaners import lower, strip
-from merch.processors import process_data, create_dataset
 from merch.operators import TemplatedPythonOperator
+from merch.processors import create_dataset, process_data
 
-
-DATA_PATH = Path('/home/jupyter/data')
-
-ORDERS_CONN_ID = 'hw4_orders_data'
-ORDERS_ENDPOINT = 'orders.csv'
-STATUS_CONN_ID = 'hw4_status_data'
-STATUS_ENDPOINT = '/b/5ed7391379382f568bd22822'
-SHARED_DB_CONN_ID = 'hw2_shared_db'
-PRIVATE_DB_CONN_ID = 'hw2_private_db'
-CUSTOMERS_TABLE = 'customers'
-GOODS_TABLE = 'goods'
 
 orders_field_names: List = ['order_id', 'order_uuid', 'good_title',
                             'date', 'amount', 'name', 'email']
@@ -66,6 +55,10 @@ default_args = {
     'start_date': days_ago(1)
 }
 
+
+data_sources = Variable.get('hw4_data_sources', deserialize_json=True)
+data_path = Path(data_sources['data_path'])
+
 dag = DAG(
     dag_id='homework_4_test',
     schedule_interval='@once',
@@ -78,10 +71,10 @@ process_orders_task = PythonOperator(
     task_id='process_orders',
     python_callable=process_data,
     op_kwargs={
-        'conn_id': ORDERS_CONN_ID,
-        'object_name': ORDERS_ENDPOINT,
+        'conn_id': data_sources['orders_data']['conn_id'],
+        'object_name': data_sources['orders_data']['endpoint'],
         'object_type': 'file',
-        'dir_path': DATA_PATH,
+        'dir_path': data_path,
         'file_type': 'csv',
         'field_names': orders_field_names,
         'clean_map': orders_clean_map,
@@ -95,10 +88,10 @@ process_status_task = PythonOperator(
     task_id='process_status',
     python_callable=process_data,
     op_kwargs={
-        'conn_id': STATUS_CONN_ID,
-        'object_name': STATUS_ENDPOINT,
+        'conn_id': data_sources['status_data']['conn_id'],
+        'object_name': data_sources['status_data']['endpoint'],
         'object_type': 'file',
-        'dir_path': DATA_PATH,
+        'dir_path': data_path,
         'file_type': 'json',
         'field_names': status_field_names,
         'clean_map': status_clean_map,
@@ -111,10 +104,10 @@ process_customers_task = PythonOperator(
     task_id='process_customers',
     python_callable=process_data,
     op_kwargs={
-        'conn_id': SHARED_DB_CONN_ID,
-        'object_name': CUSTOMERS_TABLE,
+        'conn_id': data_sources['shared_db_conn_id'],
+        'object_name': data_sources['customers_data'],
         'object_type': 'table',
-        'dir_path': DATA_PATH,
+        'dir_path': data_path,
         'file_type': 'csv',
         'field_names': customers_field_names,
         'clean_map': customers_clean_map,
@@ -127,10 +120,10 @@ process_goods_task = PythonOperator(
     task_id='process_goods',
     python_callable=process_data,
     op_kwargs={
-        'conn_id': SHARED_DB_CONN_ID,
-        'object_name': GOODS_TABLE,
+        'conn_id': data_sources['shared_db_conn_id'],
+        'object_name': data_sources['goods_data'],
         'object_type': 'table',
-        'dir_path': DATA_PATH,
+        'dir_path': data_path,
         'file_type': 'csv',
         'field_names': goods_field_names,
         'clean_map': goods_clean_map,
@@ -143,7 +136,7 @@ create_dataset_task = TemplatedPythonOperator(
     task_id='create_dataset',
     python_callable=create_dataset,
     op_kwargs={
-        'conn_id': PRIVATE_DB_CONN_ID
+        'conn_id': data_sources['private_db_conn_id']
     },
     provide_context=True,
     templates_dict={'target_sql': 'target_sql.sql',
