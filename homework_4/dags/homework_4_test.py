@@ -1,63 +1,67 @@
-# import sys
-from collections import OrderedDict
+import sys
 from pathlib import Path
-from typing import List
 
 from airflow import DAG
 from airflow.models import Variable
 from airflow.operators.python_operator import PythonOperator
 from airflow.utils.dates import days_ago
 
-# sys.path.insert(1, '/home/jupyter/lib/merch')
+sys.path.insert(1, '/home/jupyter/lib/merch')
 from merch.calculators import calculate_age, calculate_payment_status
 from merch.cleaners import lower, strip
 from merch.operators import TemplatedPythonOperator
 from merch.processors import create_dataset, process_data
 
 
-orders_field_names: List = ['order_id', 'order_uuid', 'good_title',
-                            'date', 'amount', 'name', 'email']
-orders_clean_map: OrderedDict = OrderedDict({
-    'order_uuid': [strip, lower],
-    'good_title': [strip],
-    'date': [strip],
-    'amount': [strip],
-    'name': [strip],
-    'email': [strip, lower]
-})
-orders_gen_map: OrderedDict = OrderedDict()
+orders_info = {
+    'field_names': ['order_id', 'order_uuid', 'good_title',
+                    'date', 'amount', 'name', 'email'],
+    'clean_map': {
+        'order_uuid': [strip, lower],
+        'good_title': [strip],
+        'date': [strip],
+        'amount': [strip],
+        'name': [strip],
+        'email': [strip, lower]
+    },
+    'gen_map': {}
+}
 
-status_field_names: List = ['order_uuid']
-status_clean_map: OrderedDict = OrderedDict({
-    'order_uuid': [strip, lower]
-})
-status_gen_map: OrderedDict = OrderedDict({
-    'payment_status': calculate_payment_status
-})
+status_info = {
+    'field_names': ['order_uuid'],
+    'clean_map': {
+        'order_uuid': [strip, lower]
+    },
+    'gen_map': {
+        'payment_status': calculate_payment_status
+    }
+}
 
-customers_field_names: List = ['id', 'name', 'birth_date', 'gender', 'email']
-customers_clean_map: OrderedDict = OrderedDict({
-    'email': [strip, lower]
-})
-customers_gen_map: OrderedDict = OrderedDict({
-    'age': calculate_age
-})
+customers_info = {
+    'field_names': ['id', 'name', 'birth_date', 'gender', 'email'],
+    'clean_map': {
+        'email': [strip, lower]
+    },
+    'gen_map': {
+        'age': calculate_age
+    }
+}
 
-goods_field_names: List = ['id', 'good_title', 'price']
-goods_clean_map: OrderedDict = OrderedDict({
-    'good_title': [strip],
-    'price': [strip]
-})
-goods_gen_map: OrderedDict = OrderedDict()
+goods_info = {
+    'field_names': ['id', 'good_title', 'price'],
+    'clean_map': {
+         'good_title': [strip],
+         'price': [strip]
+    },
+    'gen_map': {}
+}
 
+data_sources = Variable.get('hw4_data_sources', deserialize_json=True)
+data_path = Path(data_sources['data_path'])
 
 default_args = {
     'start_date': days_ago(1)
 }
-
-
-data_sources = Variable.get('hw4_data_sources', deserialize_json=True)
-data_path = Path(data_sources['data_path'])
 
 dag = DAG(
     dag_id='homework_4_test',
@@ -76,9 +80,9 @@ process_orders_task = PythonOperator(
         'object_type': 'file',
         'dir_path': data_path,
         'file_type': 'csv',
-        'field_names': orders_field_names,
-        'clean_map': orders_clean_map,
-        'gen_map': orders_gen_map
+        'field_names': orders_info['field_names'],
+        'clean_map': orders_info['clean_map'],
+        'gen_map': orders_info['gen_map']
     },
     provide_context=True,
     dag=dag
@@ -93,9 +97,9 @@ process_status_task = PythonOperator(
         'object_type': 'file',
         'dir_path': data_path,
         'file_type': 'json',
-        'field_names': status_field_names,
-        'clean_map': status_clean_map,
-        'gen_map': status_gen_map
+        'field_names': status_info['field_names'],
+        'clean_map': status_info['clean_map'],
+        'gen_map': status_info['gen_map']
     },
     dag=dag
 )
@@ -109,9 +113,9 @@ process_customers_task = PythonOperator(
         'object_type': 'table',
         'dir_path': data_path,
         'file_type': 'csv',
-        'field_names': customers_field_names,
-        'clean_map': customers_clean_map,
-        'gen_map': customers_gen_map
+        'field_names': customers_info['field_names'],
+        'clean_map': customers_info['clean_map'],
+        'gen_map': customers_info['gen_map']
     },
     dag=dag
 )
@@ -125,9 +129,9 @@ process_goods_task = PythonOperator(
         'object_type': 'table',
         'dir_path': data_path,
         'file_type': 'csv',
-        'field_names': goods_field_names,
-        'clean_map': goods_clean_map,
-        'gen_map': goods_gen_map
+        'field_names': goods_info['field_names'],
+        'clean_map': goods_info['clean_map'],
+        'gen_map': goods_info['gen_map']
     },
     dag=dag
 )
