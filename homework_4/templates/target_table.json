@@ -1,0 +1,15 @@
+{
+    "table_name": "{{ var.json.hw4_target_table.table_name }}",
+    "table_cols": {
+        "name": "varchar(50)",
+        "age": "integer",
+        "good_title": "varchar(100)",
+        "date": "timestamp",
+        "payment_status": "varchar(10)",
+        "total_price": "numeric",
+        "amount": "integer",
+        "last_modified_at": "timestamp"
+    },
+    "constraint_name": "{{ var.json.hw4_target_table.constraint_name }}",
+    "constraint_cols": ["name", "good_title", "date"]
+}

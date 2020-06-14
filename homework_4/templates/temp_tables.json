@@ -1,0 +1,35 @@
+[
+    {
+        "table_name": "{{ var.json.hw4_temp_tables.orders_table }}",
+        "table_file_path": "{{ ti.xcom_pull(task_ids='process_orders') }}",
+        "table_cols": {
+            "order_uuid": "varchar(50)",
+            "good_title": "varchar(100)",
+            "date": "timestamp",
+            "amount": "integer",
+            "name": "varchar(50)",
+            "email": "varchar(50)"
+        }
+    }, {
+        "table_name": "{{ var.json.hw4_temp_tables.status_table }}",
+        "table_file_path": "{{ ti.xcom_pull(task_ids='process_status') }}",
+        "table_cols": {
+            "order_uuid": "varchar(50)",
+            "payment_status": "varchar(10)"
+        }
+    }, {
+        "table_name": "{{ var.json.hw4_temp_tables.customers_table }}",
+        "table_file_path": "{{ ti.xcom_pull(task_ids='process_customers') }}",
+        "table_cols": {
+            "email": "varchar(50)",
+            "age": "integer"
+        }
+    }, {
+        "table_name": "{{ var.json.hw4_temp_tables.goods_table }}",
+        "table_file_path": "{{ ti.xcom_pull(task_ids='process_goods') }}",
+        "table_cols": {
+            "good_title": "varchar(100)",
+            "price": "numeric"
+        }
+    }
+]

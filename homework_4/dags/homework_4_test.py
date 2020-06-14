@@ -12,6 +12,7 @@ sys.path.insert(1, '/home/jupyter/lib/merch')
 from merch.calculators import calculate_age, calculate_payment_status
 from merch.cleaners import lower, strip
 from merch.processors import process_data, create_dataset
+from merch.operators import TemplatedPythonOperator
 
 
 DATA_PATH = Path('/home/jupyter/data')
@@ -61,83 +62,6 @@ goods_clean_map: OrderedDict = OrderedDict({
 goods_gen_map: OrderedDict = OrderedDict()
 
 
-TEMP_TABLES = [
-    {
-        'table_name': 'hw4_orders_tmp',
-        'table_file_path': DATA_PATH/'orders_clean.csv',
-        'table_cols': {
-            'order_uuid': 'varchar(50)',
-            'good_title': 'varchar(100)',
-            'date': 'timestamp',
-            'amount': 'integer',
-            'name': 'varchar(50)',
-            'email': 'varchar(50)'
-        }
-    },
-    {
-        'table_name': 'hw4_status_tmp',
-        'table_file_path': DATA_PATH/'5ed7391379382f568bd22822_clean.csv',
-        'table_cols': {
-            'order_uuid': 'varchar(50)',
-            'payment_status': 'varchar(10)'
-        }
-    },
-    {
-        'table_name': 'hw4_customers_tmp',
-        'table_file_path': DATA_PATH/'customers_clean.csv',
-        'table_cols': {
-            'email': 'varchar(50)',
-            'age': 'integer'
-        }
-    },
-    {
-        'table_name': 'hw4_goods_tmp',
-        'table_file_path': DATA_PATH/'goods_clean.csv',
-        'table_cols': {
-            'good_title': 'varchar(100)',
-            'price': 'numeric'
-        }
-    }
-]
-
-TARGET_TABLE = {
-    'table_name': 'hw4_final_data',
-    'table_cols': {
-        'name': 'varchar(50)',
-        'age': 'integer',
-        'good_title': 'varchar(100)',
-        'date': 'timestamp',
-        'payment_status': 'varchar(10)',
-        'total_price': 'numeric',
-        'amount': 'integer',
-        'last_modified_at': 'timestamp',
-    },
-    'constraint_name': 'hw4_unq_rec',
-    'constraint_cols': ['name', 'good_title', 'date']
-}
-
-TARGET_SQL = '''
-INSERT INTO hw4_final_data
-SELECT
-    o.name,
-    c.age,
-    g.good_title,
-    o.date,
-    s.payment_status,
-    g.price * o.amount AS total_price,
-    o.amount,
-    now() AS last_modified_at
-FROM hw4_orders_tmp o
-LEFT JOIN hw4_status_tmp s USING (order_uuid)
-LEFT JOIN hw4_customers_tmp c USING (email)
-LEFT JOIN hw4_goods_tmp g USING (good_title)
-ON CONFLICT ON CONSTRAINT hw4_unq_rec
-DO UPDATE SET
-    payment_status=EXCLUDED.payment_status,
-    last_modified_at=now() at time zone 'utc';
-'''
-
-
 default_args = {
     'start_date': days_ago(1)
 }
@@ -146,7 +70,8 @@ dag = DAG(
     dag_id='homework_4_test',
     schedule_interval='@once',
     default_args=default_args,
-    catchup=False
+    catchup=False,
+    template_searchpath='/home/jupyter/airflow_course/homework_4/templates',
 )
 
 process_orders_task = PythonOperator(
@@ -162,6 +87,7 @@ process_orders_task = PythonOperator(
         'clean_map': orders_clean_map,
         'gen_map': orders_gen_map
     },
+    provide_context=True,
     dag=dag
 )
 
@@ -213,15 +139,16 @@ process_goods_task = PythonOperator(
     dag=dag
 )
 
-create_dataset_task = PythonOperator(
+create_dataset_task = TemplatedPythonOperator(
     task_id='create_dataset',
     python_callable=create_dataset,
     op_kwargs={
-        'conn_id': PRIVATE_DB_CONN_ID,
-        'target_sql': TARGET_SQL,
-        'target_table': TARGET_TABLE,
-        'temp_tables': TEMP_TABLES
+        'conn_id': PRIVATE_DB_CONN_ID
     },
+    provide_context=True,
+    templates_dict={'target_sql': 'target_sql.sql',
+                    'target_table': 'target_table.json',
+                    'temp_tables': 'temp_tables.json'},
     dag=dag
 )
 
@@ -229,6 +156,6 @@ create_dataset_task = PythonOperator(
  process_customers_task >> process_goods_task >>
  create_dataset_task)
 
-# if __name__ == '__main__':
-#     dag.clear(reset_dag_runs=True)
-#     dag.run()
+if __name__ == '__main__':
+    dag.clear(reset_dag_runs=True)
+    dag.run()
