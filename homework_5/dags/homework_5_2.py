@@ -1,3 +1,4 @@
+# import sys
 from pathlib import Path
 
 from airflow import DAG
@@ -7,8 +8,9 @@ from airflow.operators.python_operator import (BranchPythonOperator,
                                                PythonOperator)
 from airflow.utils.dates import days_ago
 
+# sys.path.insert(1, '/home/jupyter/lib/merch')
 from merch.calculators import calculate_age, calculate_payment_status
-from merch.checkers import check_db, check_num_field, check_datetime_field
+from merch.checkers import check_db, check_datetime_field, check_num_field
 from merch.cleaners import lower, strip
 from merch.notifiers import send_message_from_file
 from merch.operators import TemplatedPythonOperator
@@ -75,7 +77,7 @@ default_args = {
 }
 
 dag = DAG(
-    dag_id='homework_4',
+    dag_id='homework_5_2',
     schedule_interval='@once',
     default_args=default_args,
     catchup=False,
@@ -187,8 +189,8 @@ notify_error_task = PythonOperator(
     task_id='notify_error',
     python_callable=send_message_from_file,
     op_kwargs={
-        'token': Variable.get('HW3_TELEGRAM_BOT_TOKEN'),
-        'chat_id': Variable.get('HW3_TELEGRAM_CHAT_ID')
+        'token': Variable.get('HW3_TELEGRAM_BOT_TOKEN_TEST'),
+        'chat_id': Variable.get('HW3_TELEGRAM_CHAT_ID_TEST')
     },
     trigger_rule='one_failed',
     provide_context=True,
@@ -204,3 +206,7 @@ check_db_task >> [process_orders_task, db_not_reachable_task]
 (process_orders_task >> process_status_task >>
  process_customers_task >> process_goods_task >>
  create_dataset_task) >> [notify_error_task, all_success_task]
+
+if __name__ == '__main__':
+    dag.clear(reset_dag_runs=True)
+    dag.run()
