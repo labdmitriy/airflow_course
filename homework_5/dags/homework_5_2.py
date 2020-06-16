@@ -14,7 +14,6 @@ from merch.calculators import calculate_age, calculate_payment_status
 from merch.callbacks import on_failure_callback
 from merch.checkers import check_datetime_field, check_db, check_num_field
 from merch.cleaners import lower, strip
-from merch.notifiers import send_bad_data_error
 from merch.operators import TemplatedPythonOperator
 from merch.processors import create_dataset, process_data
 
@@ -32,7 +31,7 @@ orders_info = {
     },
     'check_map': {
         'date': [check_datetime_field],
-        'amount': [check_datetime_field]
+        'amount': [check_num_field]
     },
     'gen_map': {}
 }
