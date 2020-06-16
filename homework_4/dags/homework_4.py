@@ -10,7 +10,7 @@ from airflow.utils.dates import days_ago
 from merch.calculators import calculate_age, calculate_payment_status
 from merch.checkers import check_db, check_num_field, check_datetime_field
 from merch.cleaners import lower, strip
-from merch.notifiers import send_message_from_file
+from merch.notifiers import send_bad_data_error
 from merch.operators import TemplatedPythonOperator
 from merch.processors import create_dataset, process_data
 
@@ -185,7 +185,7 @@ db_not_reachable_task = DummyOperator(
 
 notify_error_task = PythonOperator(
     task_id='notify_error',
-    python_callable=send_message_from_file,
+    python_callable=send_bad_data_error,
     op_kwargs={
         'token': Variable.get('HW3_TELEGRAM_BOT_TOKEN'),
         'chat_id': Variable.get('HW3_TELEGRAM_CHAT_ID')
