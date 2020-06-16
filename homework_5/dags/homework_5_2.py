@@ -1,4 +1,5 @@
 # import sys
+from functools import partial
 from pathlib import Path
 
 from airflow import DAG
@@ -10,7 +11,8 @@ from airflow.utils.dates import days_ago
 
 # sys.path.insert(1, '/home/jupyter/lib/merch')
 from merch.calculators import calculate_age, calculate_payment_status
-from merch.checkers import check_db, check_datetime_field, check_num_field
+from merch.callbacks import on_failure_callback
+from merch.checkers import check_datetime_field, check_db, check_num_field
 from merch.cleaners import lower, strip
 from merch.notifiers import send_bad_data_error
 from merch.operators import TemplatedPythonOperator
@@ -30,7 +32,7 @@ orders_info = {
     },
     'check_map': {
         'date': [check_datetime_field],
-        'amount': [check_num_field]
+        'amount': [check_datetime_field]
     },
     'gen_map': {}
 }
@@ -76,11 +78,15 @@ default_args = {
     'start_date': days_ago(1)
 }
 
+token_id = Variable.get('HW3_TELEGRAM_BOT_TOKEN_TEST')
+chat_id = Variable.get('HW3_TELEGRAM_CHAT_ID_TEST')
+
 dag = DAG(
     dag_id='homework_5_2',
     schedule_interval='@once',
     default_args=default_args,
     catchup=False,
+    on_failure_callback=partial(on_failure_callback, token_id, chat_id),
     template_searchpath='/home/jupyter/airflow_course/homework_4/templates'
 )
 
@@ -185,18 +191,6 @@ db_not_reachable_task = DummyOperator(
     dag=dag
 )
 
-notify_error_task = PythonOperator(
-    task_id='notify_error',
-    python_callable=send_bad_data_error,
-    op_kwargs={
-        'token': Variable.get('HW3_TELEGRAM_BOT_TOKEN_TEST'),
-        'chat_id': Variable.get('HW3_TELEGRAM_CHAT_ID_TEST')
-    },
-    trigger_rule='one_failed',
-    provide_context=True,
-    dag=dag
-)
-
 all_success_task = DummyOperator(
     task_id='all_success',
     dag=dag
@@ -205,8 +199,7 @@ all_success_task = DummyOperator(
 check_db_task >> [process_orders_task, db_not_reachable_task]
 (process_orders_task >> process_status_task >>
  process_customers_task >> process_goods_task >>
- #  create_dataset_task) >> all_success_task
- create_dataset_task) >> [notify_error_task, all_success_task]
+ create_dataset_task) >> all_success_task
 
 if __name__ == '__main__':
     dag.clear(reset_dag_runs=True)
