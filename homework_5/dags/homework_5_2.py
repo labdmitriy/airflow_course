@@ -1,4 +1,3 @@
-# import sys
 from functools import partial
 from pathlib import Path
 
@@ -9,7 +8,6 @@ from airflow.operators.python_operator import (BranchPythonOperator,
                                                PythonOperator)
 from airflow.utils.dates import days_ago
 
-# sys.path.insert(1, '/home/jupyter/lib/merch')
 from merch.calculators import calculate_age, calculate_payment_status
 from merch.callbacks import on_failure_callback
 from merch.checkers import check_datetime_field, check_db, check_num_field
@@ -168,9 +166,11 @@ create_dataset_task = TemplatedPythonOperator(
         'conn_id': data_sources['private_db_conn_id']
     },
     provide_context=True,
-    templates_dict={'target_sql': 'target_sql.sql',
-                    'target_table': 'target_table.json',
-                    'temp_tables': 'temp_tables.json'},
+    templates_dict={
+        'target_sql': 'target_sql.sql',
+        'target_table': 'target_table.json',
+        'temp_tables': 'temp_tables.json'
+    },
     dag=dag
 )
 
@@ -199,7 +199,3 @@ check_db_task >> [process_orders_task, db_not_reachable_task]
 (process_orders_task >> process_status_task >>
  process_customers_task >> process_goods_task >>
  create_dataset_task) >> all_success_task
-
-if __name__ == '__main__':
-    dag.clear(reset_dag_runs=True)
-    dag.run()

@@ -5,10 +5,9 @@ from time import sleep
 from airflow import DAG
 from airflow.exceptions import AirflowException
 from airflow.operators.python_operator import PythonOperator
-from airflow.utils.dates import days_ago
 
 
-SLA_PERIOD = 5
+SLA_PERIOD = 30
 
 
 def canary(
@@ -29,20 +28,20 @@ def on_failure_callback(context):
     task_instance = context['ti']
     task_id = task_instance.task_id
     dag_id = task_instance.dag_id
-    message = f'Failure in DAG: {dag_id}, task: {task_id}'
+    message = 'Failure in DAG: {}, task: {} at {}\n'
 
-    with open('/home/jupyter/data/canary_callback', 'w') as f:
-        f.write(message)
+    with open('/home/jupyter/data/canary_callback', 'a+') as f:
+        f.write(message.format(dag_id, task_id, datetime.now()))
 
 
 def sla_miss_callback(dag, task_list, blocking_task_list, slas, blocking_tis):
     task_instance = blocking_tis[0]
     task_id = task_instance.task_id
     dag_id = task_instance.dag_id
-    message = f'SLA missed in DAG: {dag_id}, task: {task_id}'
+    message = 'SLA missed in DAG: {}, task: {} at {}\n'
 
-    with open('/home/jupyter/data/canary_callback', 'w') as f:
-        f.write(message)
+    with open('/home/jupyter/data/canary_callback', 'a+') as f:
+        f.write(message.format(dag_id, task_id, datetime.now()))
 
 
 default_args = {
@@ -51,7 +50,7 @@ default_args = {
 
 dag = DAG(
     dag_id='homework_5_3',
-    schedule_interval='* 1 * * *',
+    schedule_interval='*/5 * * * *',
     default_args=default_args,
     on_failure_callback=on_failure_callback,
     sla_miss_callback=sla_miss_callback,
@@ -62,8 +61,8 @@ canary_task = PythonOperator(
     task_id='canary',
     python_callable=canary,
     op_kwargs={
-        'failure_ratio': 0.5,
-        'sla_miss_ratio': 0.5,
+        'failure_ratio': 0.1,
+        'sla_miss_ratio': 0.1,
         'sleep_time': SLA_PERIOD + 5
     },
     sla=timedelta(seconds=SLA_PERIOD),

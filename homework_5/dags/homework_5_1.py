@@ -23,8 +23,8 @@ dag = DAG(
 )
 
 send_message = TelegramSendMessageOperator(
-    token=Variable.get('HW3_TELEGRAM_BOT_TOKEN_TEST'),
-    chat_id=Variable.get('HW3_TELEGRAM_CHAT_ID_TEST'),
+    token=Variable.get('HW3_TELEGRAM_BOT_TOKEN'),
+    chat_id=Variable.get('HW3_TELEGRAM_CHAT_ID'),
     message_text='Привет',
     include_button=True,
     button_text='Поехали',
@@ -34,7 +34,7 @@ send_message = TelegramSendMessageOperator(
 )
 
 wait_for_clicks = TelegramActionsIncrementSensor(
-    token=Variable.get('HW3_TELEGRAM_BOT_TOKEN_TEST'),
+    token=Variable.get('HW3_TELEGRAM_BOT_TOKEN'),
     allowed_updates=['callback_query'],
     answer_text='Спасибо',
     task_id='wait_for_clicks',
@@ -43,9 +43,9 @@ wait_for_clicks = TelegramActionsIncrementSensor(
 )
 
 save_clicks_data = TelegramEventSaveOperator(
-    token=Variable.get('HW3_TELEGRAM_BOT_TOKEN_TEST'),
-    airtable_url=Variable.get('HW3_AIRTABLE_URL_TEST'),
-    airtable_api_key=Variable.get('HW3_AIRTABLE_API_KEY_TEST'),
+    token=Variable.get('HW3_TELEGRAM_BOT_TOKEN'),
+    airtable_url=Variable.get('HW3_AIRTABLE_URL'),
+    airtable_api_key=Variable.get('HW3_AIRTABLE_API_KEY'),
     event_type='user_click',
     task_id='save_clicks_data',
     dag=dag
