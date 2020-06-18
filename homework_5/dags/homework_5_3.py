@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from pathlib import Path
 from random import random
 from time import sleep
 
@@ -6,8 +7,8 @@ from airflow import DAG
 from airflow.exceptions import AirflowException
 from airflow.operators.python_operator import PythonOperator
 
-
 SLA_PERIOD = 30
+CANARY_CALLBACK_FILE = Path('/home/jupyter/data/canary_callback')
 
 
 def canary(
@@ -30,7 +31,7 @@ def on_failure_callback(context):
     dag_id = task_instance.dag_id
     message = 'Failure in DAG: {}, task: {} at {}\n'
 
-    with open('/home/jupyter/data/canary_callback', 'a+') as f:
+    with open(CANARY_CALLBACK_FILE, 'a+') as f:
         f.write(message.format(dag_id, task_id, datetime.now()))
 
 
@@ -40,7 +41,7 @@ def sla_miss_callback(dag, task_list, blocking_task_list, slas, blocking_tis):
     dag_id = task_instance.dag_id
     message = 'SLA missed in DAG: {}, task: {} at {}\n'
 
-    with open('/home/jupyter/data/canary_callback', 'a+') as f:
+    with open(CANARY_CALLBACK_FILE, 'a+') as f:
         f.write(message.format(dag_id, task_id, datetime.now()))
 
 

@@ -75,8 +75,8 @@ default_args = {
     'start_date': days_ago(1)
 }
 
-token_id = Variable.get('HW3_TELEGRAM_BOT_TOKEN_TEST')
-chat_id = Variable.get('HW3_TELEGRAM_CHAT_ID_TEST')
+token_id = Variable.get('HW3_TELEGRAM_BOT_TOKEN')
+chat_id = Variable.get('HW3_TELEGRAM_CHAT_ID')
 
 dag = DAG(
     dag_id='homework_5_2',
