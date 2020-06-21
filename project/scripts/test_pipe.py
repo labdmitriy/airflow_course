@@ -1,17 +1,17 @@
-from typing import List
+import re
+from pathlib import Path
+from typing import Iterable, List
 
 import gspread
-from gspread import Worksheet
-from oauth2client.service_account import ServiceAccountCredentials as sac
-
 from airflow.models.variable import Variable
+from oauth2client.service_account import ServiceAccountCredentials as sac
 
 
 class GoogleSheet:
     def __init__(self, key_name: str) -> None:
         self.secret_key = Variable.get(key_name, deserialize_json=True)
 
-    def get_sheet(self, sheet_url_name: str, head: int = 1) -> Worksheet:
+    def get_sheet(self, sheet_url_name: str) -> None:
         google_sheet_url = Variable.get(sheet_url_name)
 
         scope = ['https://spreadsheets.google.com/feeds',
@@ -20,7 +20,6 @@ class GoogleSheet:
         client = gspread.authorize(creds)
 
         self.sheet = client.open_by_url(google_sheet_url).sheet1
-        return self.sheet
 
     def get_column_values(self, column_name: str) -> List:
         head = self.sheet.find(column_name)
@@ -34,7 +33,7 @@ class GoogleSheet:
         column_name: str,
         update_length: int
     ) -> str:
-        head = sheet.find(column_name)
+        head = self.sheet.find(column_name)
         head_address = head.address
 
         row = int(head_address[1:])
@@ -46,8 +45,9 @@ class GoogleSheet:
         update_range = f'{col}{start_row}:{col}{end_row}'
         return update_range
 
-    def update(self, update_range: str, update_values: List) -> None:
-        self.sheet.update(update_range, update_values)
+    def update(self, update_range: str, update_values: Iterable) -> None:
+        self.sheet.update(update_range,
+                          [[value] for value in update_values])
 
 
 GOOGLE_KEY_NAME = 'google_secret_key'
@@ -56,12 +56,39 @@ URL_COL_NAME = 'ссылка'
 TEAM_COL_NAME = 'Лабазкин Дмитрий & Хачатрян Екатерина'
 
 gs = GoogleSheet(GOOGLE_KEY_NAME)
-sheet = gs.get_sheet(
-    GOOGLE_SHEET_URL_NAME,
-    head=2
-)
-urls = gs.get_column_values(URL_COL_NAME)
-urls_count = len(urls)
+gs.get_sheet(GOOGLE_SHEET_URL_NAME)
+urls_list = gs.get_column_values(URL_COL_NAME)
+urls_count = len(urls_list)
 update_range = gs.calculate_update_range(TEAM_COL_NAME, urls_count)
-update_values = [[val] for val in range(urls_count)]
+update_values = range(urls_count)
 gs.update(update_range, update_values)
+
+
+VALID_DOMAINS = ['habr.com', 'pikabu.ru', 'pornhub.com', 'rutube.ru', 'vimeo.com', 'youtube.com']
+
+
+def is_valid_url(url):
+    regex = re.compile(
+        r'^(?:http|ftp)s?://'  # http:// or https://
+        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|'  # domain...
+        r'localhost|'  # localhost...
+        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # ...or ip
+        r'(?::\d+)?'  # optional port
+        r'(?:/?|[/?]\S+)$', re.IGNORECASE)
+
+    if re.match(regex, url) is not None:
+        return True
+    else:
+        return False
+
+
+invalid_urls = []
+
+for url in urls_list:
+    if not is_valid_url(url):
+        invalid_urls.append(url)
+
+print(invalid_urls)
+print(len(invalid_urls))
+
+
