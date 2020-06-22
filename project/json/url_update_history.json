@@ -1,0 +1,9 @@
+{
+    "table_name": "url_update_history",
+    "table_cols": {
+        "url": "varchar",
+        "last_modified_at": "timestamp default (now() at time zone 'utc')"
+    },
+    "constraint_name": "url_unq",
+    "constraint_cols": ["url"]
+}

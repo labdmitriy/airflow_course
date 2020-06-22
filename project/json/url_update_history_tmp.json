@@ -1,0 +1,6 @@
+{
+    "table_name": "url_update_history_tmp",
+    "table_cols": {
+        "url": "varchar"
+    }
+}
