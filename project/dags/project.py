@@ -90,6 +90,7 @@ process_urls_task = TemplatedPythonOperator(
     dag=dag
 )
 
+
 if __name__ == '__main__':
     dag.clear(reset_dag_runs=True)
     dag.run()
