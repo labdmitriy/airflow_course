@@ -1,9 +1,9 @@
 {
-    "table_name": "url_update_history",
+    "table_name": "{{ var.json.project_target_table.table_name }}",
     "table_cols": {
         "url": "varchar",
         "last_modified_at": "timestamp default (now() at time zone 'utc')"
     },
-    "constraint_name": "url_unq",
-    "constraint_cols": ["url"]
+    "constraint_name": "{{ var.json.project_target_table.constraint_name }}",
+    "constraint_cols": ["{{ var.json.project_target_table.constraint_cols[0] }}"]
 }

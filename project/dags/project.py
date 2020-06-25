@@ -1,5 +1,5 @@
+import csv
 import json
-import sys
 from pathlib import Path
 from typing import Dict, List
 
@@ -8,10 +8,10 @@ from airflow.models import Variable
 from airflow.utils.dates import days_ago
 from airflow.operators.python_operator import PythonOperator
 
+
 from merch.operators import TemplatedPythonOperator
-sys.path.insert(1, '/home/jupyter/lib/telegram_interactions')
+from merch.db import PostgresDB
 from telegram_interactions.bot import TelegramBot
-sys.path.insert(1, '/home/jupyter/lib/scrape')
 from scrape.parsers import get_domain_counts
 from scrape.sheets import GoogleSheet
 from scrape.validators import URLValidator
@@ -21,15 +21,18 @@ from scrape.reporters import calculate_processing_stats, generate_report
 DATA_SOURCES = Variable.get('project_data_sources', deserialize_json=True)
 DATA_PATH = Path(DATA_SOURCES['data_path'])
 PROJECT_DB_CONN_ID = DATA_SOURCES['project_db_conn_id']
+TEMP_TABLE_INFO = Variable.get('project_temp_table', deserialize_json=True)
+TEMP_TABLE_NAME = TEMP_TABLE_INFO['table_name']
 
 GOOGLE_SECRET_KEY = Variable.get('google_secret_key', deserialize_json=True)
-GOOGLE_SHEET_URL = Variable.get('google_sheet_url_test')
+GOOGLE_SHEET_URL = Variable.get('google_sheet_url')
 URL_COL_NAME = 'ссылка'
 TEAM_COL_NAME = 'Лабазкин Дмитрий & Хачатрян Екатерина'
 
 VALIDATION_RESULTS_PATH = DATA_PATH/'url_validation_results.json'
 PARSE_RESULTS_PATH = DATA_PATH/'url_parse_results.json'
 ERROR_STATS_PATH = DATA_PATH/'url_error_stats.csv'
+
 
 VALID_DOMAINS = [
     'habr.com', 'pikabu.ru', 'pornhub.com',
@@ -67,11 +70,15 @@ def process_urls(
     gs.get_sheet(google_sheet_url)
     urls_list = gs.get_column_values(url_col_name)
     blacklist_query = context['templates_dict']['blacklist_query']
+    target_table = json.loads(context['templates_dict']['target_table'])
+    temp_table = json.loads(context['templates_dict']['temp_table'])
 
     url_validator = URLValidator(
         valid_domains,
         blacklist_conn_id,
-        blacklist_query
+        blacklist_query,
+        target_table,
+        temp_table
     )
 
     validation_results = []
@@ -110,9 +117,15 @@ def parse_urls(
 
 
 def calculate_stats(
+    google_secret_key: Dict,
+    google_sheet_url: str,
+    team_col_name: str,
     validation_results_path: Path,
     parse_results_path: Path,
-    error_stats_path: Path
+    error_stats_path: Path,
+    blacklist_conn_id: str,
+    temp_table_name: str,
+    **context
 ) -> str:
     valid_results = []
     parse_results = []
@@ -129,6 +142,41 @@ def calculate_stats(
         valid_results,
         parse_results
     )
+
+    parsed_urls = [stat['url'] for stat in processing_stats
+                   if stat['is_parsed'] is True]
+
+    with open('/tmp/parsed_urls.csv', 'w') as f:
+        field_names = ['url']
+        writer = csv.DictWriter(f, fieldnames=field_names)
+
+        writer.writeheader()
+
+        for url in set(parsed_urls):
+            writer.writerow({'url': url})
+
+    load_data_query = context['templates_dict']['load_data_query']
+    pg_db = PostgresDB(blacklist_conn_id)
+    pg_db.load_table_from_file(temp_table_name, '/tmp/parsed_urls.csv')
+    pg_db.execute(load_data_query)
+
+    gs = GoogleSheet(google_secret_key)
+    gs.get_sheet(google_sheet_url)
+    current_values = gs.get_column_values(team_col_name)
+
+    update_values = []
+
+    for stat in processing_stats:
+        if len(current_values) > 0 and stat['value'] == 'no_update':
+            update_values.append(current_values[stat['row_num']])
+        else:
+            update_values.append(stat['value'])
+
+    update_range = gs.calculate_update_range(
+        team_col_name,
+        len(update_values)
+    )
+    gs.update(update_range, update_values)
 
     summary_message = generate_report(processing_stats, error_stats_path)
 
@@ -153,45 +201,55 @@ def send_report(
     )
 
 
+process_urls_task = TemplatedPythonOperator(
+    task_id='process_urls',
+    python_callable=process_urls,
+    op_kwargs={
+        'google_secret_key': GOOGLE_SECRET_KEY,
+        'google_sheet_url': GOOGLE_SHEET_URL,
+        'url_col_name': URL_COL_NAME,
+        'valid_domains': VALID_DOMAINS,
+        'blacklist_conn_id': PROJECT_DB_CONN_ID,
+        'validation_results_path': VALIDATION_RESULTS_PATH,
+    },
+    templates_dict={
+        'blacklist_query': 'get_blacklist.sql',
+        'target_table': 'url_update_history.json',
+        'temp_table': 'url_update_history_tmp.json'
+    },
+    provide_context=True,
+    dag=dag
+)
 
-# process_urls_task = TemplatedPythonOperator(
-#     task_id='process_urls',
-#     python_callable=process_urls,
-#     op_kwargs={
-#         'google_secret_key': GOOGLE_SECRET_KEY,
-#         'google_sheet_url': GOOGLE_SHEET_URL,
-#         'url_col_name': URL_COL_NAME,
-#         'valid_domains': VALID_DOMAINS,
-#         'blacklist_conn_id': PROJECT_DB_CONN_ID,
-#         'validation_results_path': VALIDATION_RESULTS_PATH
-#     },
-#     templates_dict={
-#         'blacklist_query': 'get_blacklist.sql'
-#     },
-#     provide_context=True,
-#     dag=dag
-# )
+parse_urls_task = PythonOperator(
+    task_id='parse_urls',
+    python_callable=parse_urls,
+    op_kwargs={
+        'domains': VALID_DOMAINS,
+        'sleep_times': SLEEP_TIMES,
+        'validation_results_path': VALIDATION_RESULTS_PATH,
+        'parse_results_path': PARSE_RESULTS_PATH
+    },
+    dag=dag
+)
 
-# parse_urls_task = PythonOperator(
-#     task_id='parse_urls',
-#     python_callable=parse_urls,
-#     op_kwargs={
-#         'domains': VALID_DOMAINS,
-#         'sleep_times': SLEEP_TIMES,
-#         'validation_results_path': VALIDATION_RESULTS_PATH,
-#         'parse_results_path': PARSE_RESULTS_PATH
-#     },
-#     dag=dag
-# )
-
-calculate_stats_task = PythonOperator(
+calculate_stats_task = TemplatedPythonOperator(
     task_id='calculate_stats',
     python_callable=calculate_stats,
     op_kwargs={
+        'google_secret_key': GOOGLE_SECRET_KEY,
+        'google_sheet_url': GOOGLE_SHEET_URL,
+        'team_col_name': TEAM_COL_NAME,
         'validation_results_path': VALIDATION_RESULTS_PATH,
         'parse_results_path': PARSE_RESULTS_PATH,
-        'error_stats_path': ERROR_STATS_PATH
+        'error_stats_path': ERROR_STATS_PATH,
+        'blacklist_conn_id': PROJECT_DB_CONN_ID,
+        'temp_table_name': TEMP_TABLE_NAME
     },
+    templates_dict={
+        'load_data_query': 'load_data.sql'
+    },
+    provide_context=True,
     dag=dag
 )
 
@@ -207,8 +265,8 @@ send_report_task = PythonOperator(
     dag=dag
 )
 
-# process_urls_task >> parse_urls_task
-calculate_stats_task >> send_report_task
+(process_urls_task >> parse_urls_task
+ >> calculate_stats_task >> send_report_task)
 
 if __name__ == '__main__':
     dag.clear(reset_dag_runs=True)

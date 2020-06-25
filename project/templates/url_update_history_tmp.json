@@ -1,5 +1,5 @@
 {
-    "table_name": "url_update_history_tmp",
+    "table_name": "{{ var.json.project_temp_table.table_name }}",
     "table_cols": {
         "url": "varchar"
     }

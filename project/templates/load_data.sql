@@ -1,8 +1,8 @@
-INSERT INTO url_update_history
+INSERT INTO {{ var.json.project_target_table.table_name }}
 SELECT
   url
 FROM 
-  url_update_history_tmp
-ON CONFLICT ON CONSTRAINT url_unq
+  {{ var.json.project_temp_table.table_name }}
+ON CONFLICT ON CONSTRAINT {{ var.json.project_target_table.constraint_name }}
 DO UPDATE SET
     last_modified_at=now() at time zone 'utc';

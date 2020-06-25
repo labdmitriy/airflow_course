@@ -3,4 +3,4 @@ SELECT
 FROM 
   {{ var.json.project_target_table.table_name }}
 WHERE
-  last_modified_at >  now() at time zone 'utc' - INTERVAL '10 MINUTES';
+  last_modified_at >  now() at time zone 'utc' - INTERVAL '2 DAYS';
