@@ -18,7 +18,10 @@
 
 ## Решение
 ### Описание
-- Для решения использовался функционал из нескольких библиотек, написанных в рамках курса - telegram_interactions, merch, scrape
+- Для решения использовался функционал из нескольких библиотек, написанных в рамках курса
+    - telegram_interactions (https://github.com/labdmitriy/telegram_interactions)
+    - merch (https://github.com/labdmitriy/merch) 
+    - scrape (https://github.com/labdmitriy/scrape)
 
 ### Шаги
 1. **Обработка URLs из Google Sheets**
