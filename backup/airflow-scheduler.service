@@ -1,0 +1,17 @@
+[Unit]
+Description=Airflow scheduler daemon
+After=network.target postgresql.service mysql.service redis.service rabbitmq-server.service
+Wants=postgresql.service mysql.service redis.service rabbitmq-server.service
+
+[Service]
+EnvironmentFile=/home/jupyter/airflow/airflow.env
+User=jupyter
+Group=jupyter
+Type=simple
+ExecStart=/bin/bash -c 'source /home/jupyter/airflow/bin/activate && airflow scheduler'
+Restart=on-failure
+RestartSec=5s
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
